@@ -1,21 +1,31 @@
----
-title: "Assignment ACST8086"
-author: "Quynh Anh Luong"
-date: "10/1/2021"
-output: word_document
----
+Context: 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+An Australian superannuation company that sells retirement income products. Your team has been increasingly aware of the risk faced due to the increasing longevity of your customer base. Your team has been asked to consider strategies to reduce your longevity risk exposure in order to shore up the financial soundness of your company. One of your manager’s ideas is to diversify your pool of customers by expanding into other countries in the Asia-Pacific region, starting with Japan. 
+Your job is to create a mortality model for Japan based on The Japan mortality data on the Human Mortality Database.
+
+Summary for the project:
+
+The purpose of this project is to produce a mortality model for all Japanese adults (18+). The mortality rate will be useful for monitoring the accumulation of superannuation funds during the working lifetime of an individual in Japan. The generalized Gompertz-Makeham model (with r=3, s=2) and the Lee Carter model were chosen for modelling. However, over-graduation occurred when fitting the GM model. GM model was considered as not suitable for fitting this data due to the result of several tests. The Lee-Carter model performed better at forecasting than GM model.
+
+Brief description of the data (only relevant variables are mentioned):
+
+year: From 1947 to 2019
+age: From 1 to 110+ (in model, we only examine age from 18+)
+pop:	Initial exposed to risk 
+rate:	Death rate
+
+The complete code for the mortality model:
+
+1. we find Central exposed to risk (exc), mortality rates(mu) for year 2017,2018,2019:
 
 ```{r}
 library(demography)
 library(forecast)
 
-JMort <- hmd.mx("JPN","quynhanh2497bb@gmail.com","****") 
+JMort <- hmd.mx("JPN","quynhanh2497bb@gmail.com","****") # JMort is the data needed for modelling
 
-# we find Central exposed to risk, mortality rates for year 2017,2018,2019
+# we find Central exposed to risk, mortality rates for year 2017, 2018, 2019
+
 qx.17 <- JMort[["rate"]][["total"]][,"2017"][-c(0:18)]
 lx.17 <- JMort[["pop"]][["total"]][,"2017"][-c(0:18)]
 dx.17 <- lx.17*qx.17
@@ -36,16 +46,21 @@ mu.x.19 <- dx.19/exc.19
 ```
 
 
-2.
+2. The plot of the log of mortality rate for 2019 was created to analyse the behaviour of mortality rate over the year. The log mortality rate tended to increase over time. There were some noticeable points in this plot:
+•	There was an accident hump for age range 20-24. This could be due to many factors: psychology, accident, human nature, … This accident hump was observed through many empirical evidence. 
+•	The rate tended to increase faster as people are getting older. 
 
 ```{r}
-plot(age,log(mu.x.18),main="Plot of the mortality 2019",ylab = "log of mortality rate")
+plot(age,log(mu.x.19),main="Plot of the mortality 2019",ylab = "log of mortality rate")
 ```
 
+3. Generalized Gompertz-Makeham (GM) family was used for fitting the rate of mortality. GM(3,2) was selected to fit the model after validating. 
 
-3.b. ESTIMATE hyper-parameters r and s
+Assume the hyper-parameters r and s take values from 0 to 10. Using the 2017 data as the calibration data, 2018 as the validation data and 2019 as the test data, then the optimal values for r and s were chosen to be 3 and 2.
 
-3.b.i. Choosing r,s via training data set and validation set
+3.a.ESTIMATE hyper-parameters r and s:
+
+Choosing r,s via training data set and validation set:
 
 case 1: 0< (r,s) <11
 
@@ -203,7 +218,7 @@ min(sapply(c(2:10),fr2)) #value 0.03164807 > 0.007150556,then this case does not
 ```
 From the result of loss function values for each case, (r,s)=(3,2) provides the smallest value for loss function. Hence, (r,s)=(3,2) is chosen.
 
-3.c.
+3.b. Fit the chosen optimal Gompertz-Makeham mortality model to the 2018 mortality data:
 
 Assume Dx ~ Poisson(Exc*mu), calibrating via weighted least square.
 
@@ -231,7 +246,7 @@ lines(age,log(mu_estimate))
 ```
 
 
-3.d.
+3.c. 6 Tests of graduation to the previous fit on the 2018 data:
 
 ```{r}
 # standardized deviation at age x
@@ -239,14 +254,15 @@ Zx <- (dx.18 - exc.18*mu_estimate)/sqrt(exc.18*mu_estimate)
 hist(Zx)
 ```
 
-3.d.i.Chi-squared test of fit f
+Chi-squared test of fit f : This test tests the overall fit of the model. After conducting the test, the model does not fit. This is because Zx- the standard deviations are not normally distributed.
 
 ```{r}
 t.stat <- sum(Zx^2) # t.stat is the test statistic for this test
 if(t.stat < qchisq(.95, df=length(age)-6)){print("The graduated mortality fit the data well")}else{print("The graduated mortality does not fit the data well")}
 ```
 
-ii. Standardised deviations test
+Standardised deviations test :This test also tests the overall fit of the model. There were 8 intervals for this test: (-Inf,-3),(-3,-2),(-2,-1),(-1,0),(0,1),(1,2),(2,3),(3,Inf). However, the standard deviations are not normally distributed, there are enough efficient evidence to reject Ho. Hence, the model did not fit. From the histogram of Zx, we can see that Zx was spread too much out into the tails, which might lead to over-graduation. 
+
 
 ```{r}
 # we use 8 interval (-Inf,-3),(-3,-2),(-2,-1),(-1,0),(0,1),(1,2),(2,3),(3,Inf)
@@ -271,7 +287,7 @@ if(X < qchisq(.95, df=3)){print("The graduated mortality fit the data well")}els
 
 ```
 
-iii. Signs test
+Signs test : The model did not reject Ho for this test. Therefore, there was the balance between number of positive deviations and negative deviations. However, this test did not provide an indication of the magnitude of deviations.
 
 ```{r}
 # Finding k and m-k
@@ -284,7 +300,7 @@ P <- length(Zx[Zx>0]) # P is 39
 
 ```
 
-iv. Cumulative deviations test f
+Cumulative deviations test f : For this test, we conducted the test on the age from 25 to 45. The test statistic is much lower than -1.96, that indicated the graduated rates were too high compared to the observed rates. As a result, we rejected Ho.
 
 ```{r}
 # we test the age range (31:45)
@@ -292,7 +308,7 @@ test.stat <- sum(dx.18[c(7:27)]-exc.18[c(7:27)]*mu_estimate[c(7:27)])/sqrt(sum(e
 test.stat # < -1.96 # Reject Ho
 # test.stat = -80.14821 is very low, hence over-graduation
 ```
-v. Grouping of signs test
+Grouping of signs test: This test was used for over-graduation testing. The model was over-graduated since the number of groups of positive Zx was too small and lower than critical k=10.
 
 ```{r}
 # calculate the groups from 93 values
@@ -308,8 +324,7 @@ Pr(11) # gives value 0.8355269
 # G <10 so we reject Ho at 5% significant interval. Hence, over-graduation.
 ```
 
-
-vi. Serial correlations test
+Serial correlations test: this test was also used for testing over-graduation. Although it was not powerful than the grouping of signs test, we still reject Ho, hence the over-graduation of the model.
 
 ```{r}
 z1 <- Zx[c(1:90)] # the lag is 3
@@ -319,7 +334,7 @@ r <- sum((z1-z)*(z2-z))/90/sum((Zx-z)^2)*93
 t.stat2 <- r*sqrt(93)
 if(t.stat2 < 1.645){print("Fail to reject Ho")}else{print("The model is over-graduation")}
 ```
-3.e. 
+3.d. the test error on the 2019 mortality data when applying the model (assuming no mortality improvements):
 
 ```{r}
 # applying the Gompert Makeham model we obtain the mortality rate for 2019
@@ -332,11 +347,9 @@ abline(0, 1, lty = 2, col = "red")
 plot(age,log(mu.x.19),col="red",main="Log of rojected mortality vs log of observed mortality ",type="l")
 lines(age,log(mu.predict),type = "l")
 ```
-
+#The test error MSE is not small, the projected values did not match the values in 2019. 
 
 4. Mortality projection fitting – Lee-Carter Model
-
-4.b-d.
 
 ```{r}
 JMort.LC <- lca(JMort, series = "total",years = JMort$year[-73], max.age = 100)
@@ -347,7 +360,6 @@ heatmap(JMort.LC$residuals$y, Rowv=NA, Colv=NA, col = terrain.colors(256))
 heatmap(JMort.LC$residuals$y, Rowv=NA, Colv=NA, col = c("black", "white"))
 ```
 
-4.c.
 
 ```{r}
 JMort.LC.forecast <- forecast(JMort.LC,h=50)
