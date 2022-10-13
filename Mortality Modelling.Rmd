@@ -1,0 +1,371 @@
+---
+title: "Assignment ACST8086"
+author: "Quynh Anh Luong"
+date: "10/1/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(demography)
+library(forecast)
+
+JMort <- hmd.mx("JPN","quynhanh2497bb@gmail.com","****") 
+
+# we find Central exposed to risk, mortality rates for year 2017,2018,2019
+qx.17 <- JMort[["rate"]][["total"]][,"2017"][-c(0:18)]
+lx.17 <- JMort[["pop"]][["total"]][,"2017"][-c(0:18)]
+dx.17 <- lx.17*qx.17
+exc.17 <-lx.17-dx.17/2
+mu.x.17 <- dx.17/exc.17
+age <- JMort[["age"]][-c(0:18)]
+qx.18 <- JMort[["rate"]][["total"]][,"2018"][-c(0:18)]
+lx.18 <- JMort[["pop"]][["total"]][,"2018"][-c(0:18)]
+dx.18 <- lx.18*qx.18
+exc.18 <-lx.18-dx.18/2
+mu.x.18 <- dx.18/exc.18
+qx.19 <- JMort[["rate"]][["total"]][,"2019"][-c(0:18)]
+lx.19 <- JMort[["pop"]][["total"]][,"2019"][-c(0:18)]
+dx.19 <- lx.19*qx.19
+exc.19 <-lx.19-dx.19/2
+mu.x.19 <- dx.19/exc.19
+
+```
+
+
+2.
+
+```{r}
+plot(age,log(mu.x.18),main="Plot of the mortality 2019",ylab = "log of mortality rate")
+```
+
+
+3.b. ESTIMATE hyper-parameters r and s
+
+3.b.i. Choosing r,s via training data set and validation set
+
+case 1: 0< (r,s) <11
+
+```{r}
+
+# function "test" will be used for fitting parameters on the training data set.
+# test will return the weighted square
+test <- function(par){
+  alpha <- c(par[3],par[4],par[5],par[6],par[7],par[8],par[9],par[10],par[11],par[12])
+  beta <- c(par[13],par[14],par[15],par[16],par[17],par[18],par[19],par[20],par[21],par[22])
+  # r is par[1] , s is par[2], alpha/beta can take maximum 10 value.
+  x= age
+  temp1 = 0
+  temp2 = 0
+  if (par[1]< 11 & par[1]> 0 & par[2]<11 & par[2]>0){
+  for(i in 1:par[1]){temp1=temp1+alpha[i]*(x^(i-1))} 
+  for(j in 1:par[2]){temp2=temp2+beta[j]*(x^(j-1))}
+  mu = temp1 + exp(temp2)}
+  else {mu = Inf} # mu is infinite so we will not take into account the case where r,s are not belong to (1:10)
+  if(all(mu >0.0002 & mu <1.5)){c = sum(exc.17*(mu.x.17-mu)^2)}else{c= Inf} 
+  # we put constraints on mu so that its values will be closer to the observations
+  # c is weighted least square - we use it to fit parameters
+  # we take c= Inf so that optim will not consider value for parameters in which 0.0002<mu<1.5 is not achieved.
+  return(c)
+}
+
+
+# test2 will return the value of loss function
+test2 <- function(r,s){
+  fit.t <- optim(par=c(r,s,0.0002,0,0,0,0,0,0,0,0,0,-13,0.121,0,0,0,0,0,0,0,0),fn=test)
+  par <- c(1:20)
+  for(k in 1:22){par[k]=fit.t$par[k]}
+  alpha <- c(par[3],par[4],par[5],par[6],par[7],par[8],par[9],par[10],par[11],par[12])
+  beta <- c(par[13],par[14],par[15],par[16],par[17],par[18],par[19],par[20],par[21],par[22])
+  x= age
+  temp1 = 0
+  temp2 = 0
+  for(i in 1:r){temp1=temp1+alpha[i]*(x^(i-1))}
+  for(j in 1:s){temp2=temp2+beta[j]*(x^(j-1))}
+  mu_e = temp1 + exp(temp2) 
+  loss <- sum((mu.x.18 - mu_e)^2)/length(age) # we use MSE as loss function
+  return(loss)
+}
+
+# Choosing the optimal hyper-parameters r,s
+x1 <- c(test2(1,1),test2(1,2),test2(1,3),test2(1,4),test2(1,5),test2(1,6),test2(1,7),test2(1,8),test2(1,9),test2(1,10))
+m1 <- x1[which(x1==min(x1))]
+
+x2 <- c(test2(2,1),test2(2,2),test2(2,3),test2(2,4),test2(2,5),test2(2,6),test2(2,7),test2(2,8),test2(2,9),test2(2,10))
+m2 <- x2[which(x2==min(x2))]
+
+x3 <- c(test2(3,1),test2(3,2),test2(3,3),test2(3,4),test2(3,5),test2(3,6),test2(3,7),test2(3,8),test2(3,9),test2(3,10))
+m3 <- x3[which(x3==min(x3))]
+
+x4 <- c(test2(4,1),test2(4,2),test2(4,3),test2(4,4),test2(4,5),test2(4,6),test2(4,7),test2(4,8),test2(4,9),test2(4,10))
+m4 <- x4[which(x4==min(x4))]
+
+x5 <- c(test2(5,1),test2(5,2),test2(5,3),test2(5,4),test2(5,5),test2(5,6),test2(5,7),test2(5,8),test2(5,9),test2(5,10))
+m5 <- x5[which(x5==min(x5))]
+
+x6 <- c(test2(6,1),test2(6,2),test2(6,3),test2(6,4),test2(6,5),test2(6,6),test2(6,7),test2(6,8),test2(6,9),test2(6,10))
+m6 <- x6[which(x6==min(x6))]
+
+x7 <- c(test2(7,1),test2(7,2),test2(7,3),test2(7,4),test2(7,5),test2(7,6),test2(7,7),test2(7,8),test2(7,9),test2(7,10))
+m7 <- x7[which(x7==min(x7))]
+
+x8 <- c(test2(8,1),test2(8,2),test2(8,3),test2(8,4),test2(8,5),test2(8,6),test2(8,7),test2(8,8),test2(8,9),test2(8,10))
+m8 <- x8[which(x8==min(x8))]
+
+x9 <- c(test2(9,1),test2(9,2),test2(9,3),test2(9,4),test2(9,5),test2(9,6),test2(9,7),test2(9,8),test2(9,9),test2(9,10))
+m9 <- x9[which(x9==min(x9))]
+
+x10 <- c(test2(10,1),test2(10,2),test2(10,3),test2(10,4),test2(10,5),test2(10,6),test2(10,7),test2(10,8),test2(10,9),test2(10,10))
+m10 <- x10[which(x10==min(x10))]
+
+min <- c(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10)
+which(min==min(min)) #location 3 # value 0.007150556
+# then m3 is the lowest value, 
+which(x3==min(x3)) # 2, so test2(3,2) gives the smallest value
+# then r=3,s=2 gives the smallest value
+```
+
+case 2: r=0, 0<s<11
+
+
+```{r}
+## function for weighted least square -----------------------------------------------------
+# Similarly, fs is used for fitting parameters in training set while fs2 is used for validation.
+fs <- function(par){
+  beta <- c(par[2],par[3],par[4],par[5],par[7],par[7],par[8],par[9],par[10],par[11])
+  par[1] <- as.integer(par[1]) # s is par[1]
+  beta <- beta[c(1:par[1])]
+  x= age
+  temp1 = 0
+  if (par[1]< 11 & par[1]>0){
+  for(i in 1:par[1]){temp1=temp1+beta[i]*(x^(i-1))}
+  mu = exp(temp1)}
+  else {mu = Inf} 
+  if(all(mu >0.0002 & mu <1.5)){
+  c = sum(exc.17*(mu.x.17-mu)^2)}else{c= Inf} 
+  return(c)
+}
+
+fs2 <- function(s){
+  fit.t <- optim(par=c(s,0,0,0,0,0,0,0,0,0,0),fn=fs)
+  par <- c(1:10)
+  for(k in 1:11){par[k]=fit.t$par[k]}
+  beta <- c(par[2],par[3],par[4],par[5],par[6],par[7],par[8],par[9],par[10],par[11])
+  x= age
+  temp2 = 0
+  for(j in 1:s){temp2=temp2+beta[j]*(x^(j-1))}
+  mu_e = exp(temp2) 
+  loss <- sum((mu.x.18 - mu_e)^2)/length(age)
+  return(loss)
+}
+
+min(sapply(c(1:10),fs2)) #value 0.05944478 > 0.007150556,then this case does not give the lower value of loss function.
+
+```
+case 3: s=0,1<r<11
+
+```{r}
+## function for weighted least square -----------------------------------------------------
+# function fr is for training data set while fr2 is for validation.
+fr <- function(par){
+  alpha <- c(par[2],par[3],par[4],par[5],par[7],par[7],par[8],par[9],par[10],par[11])
+  par[1] <- as.integer(par[1]) # r is par[1]
+  alpha <- alpha[c(1:par[1])]
+  x= age
+  temp1 = 0
+  if (par[1]< 11 & par[1]> 1){
+  for(i in 1:par[1]){temp1=temp1+alpha[i]*(x^(i-1))}
+  mu = temp1}
+  else {mu = Inf}
+  if(all(mu >0.0002 & mu <1.5)){
+  c = sum(exc.17*(mu.x.17-mu)^2)}else{c= Inf} 
+}
+
+
+fr2 <- function(r){
+  fit.t <- optim(par=c(r,0.0005,0,0,0,0,0,0,0,0,0),fn=fr)
+  par <- c(1:10)
+  for(k in 1:11){par[k]=fit.t$par[k]}
+  alpha <- c(par[2],par[3],par[4],par[5],par[6],par[7],par[8],par[9],par[10],par[11])
+  x= age
+  temp1 = 0
+  for(i in 1:r){temp1=temp1+alpha[i]*(x^(i-1))}
+  mu_e = temp1  
+  loss <- sum((mu.x.18 - mu_e)^2)/length(age)
+  return(loss)
+}
+
+min(sapply(c(2:10),fr2)) #value 0.03164807 > 0.007150556,then this case does not give the lower value of loss function.
+# r=1 is not valid so we exclude r=1
+```
+From the result of loss function values for each case, (r,s)=(3,2) provides the smallest value for loss function. Hence, (r,s)=(3,2) is chosen.
+
+3.c.
+
+Assume Dx ~ Poisson(Exc*mu), calibrating via weighted least square.
+
+```{r}
+fit <- function(par){
+  x= age
+  mu =  par[1]+par[2]*x +par[3]*(x^2)+exp(par[4]+par[5]*x)
+  if(all(mu>0.0002 & mu <1.5)){
+  c = sum(exc.18*(mu.x.18-mu)^2)/length(age)}else{c=Inf}
+  return(c)
+}
+ 
+mu_e <- function(par){ 
+x=age
+ mu = par[1]+par[2]*x +par[3]*(x^2)+exp(par[4]+par[5]*x)
+}
+
+par <- optim(par=c(0.000217,0,0,-13,0.121),fn=fit)
+c <- par$par
+mu_estimate <- mu_e(c)
+plot(mu.x.18,mu_estimate)
+abline(0, 1, lty = 2, col = "red")
+plot(age,log(mu.x.18),type = "l",col="red")
+lines(age,log(mu_estimate))
+```
+
+
+3.d.
+
+```{r}
+# standardized deviation at age x
+Zx <- (dx.18 - exc.18*mu_estimate)/sqrt(exc.18*mu_estimate)
+hist(Zx)
+```
+
+3.d.i.Chi-squared test of fit f
+
+```{r}
+t.stat <- sum(Zx^2) # t.stat is the test statistic for this test
+if(t.stat < qchisq(.95, df=length(age)-6)){print("The graduated mortality fit the data well")}else{print("The graduated mortality does not fit the data well")}
+```
+
+ii. Standardised deviations test
+
+```{r}
+# we use 8 interval (-Inf,-3),(-3,-2),(-2,-1),(-1,0),(0,1),(1,2),(2,3),(3,Inf)
+# calculating the observed
+Zx.01 <- length(Zx[0<Zx & Zx<1])  # this gives the number of Zx in range (0,1)
+Zx.12 <- length(Zx[1<Zx & Zx<2])
+Zx.23 <- length(Zx[2<Zx & Zx<3])
+Zx.3 <- length(Zx[Zx>3])
+Zx.01.n <- length(Zx[-1<Zx & Zx<0]) # this gives the number of Zx in range(-1,0), "n" implies negative
+Zx.12.n <- length(Zx[-2<Zx & Zx< -1])
+Zx.23.n <- length(Zx[-3<Zx & Zx< -2])
+Zx.3.n <- length(Zx[Zx< -3])
+# calculating the expected
+Zx.01.e <- 0.32*length(Zx)
+Zx.12.e <- 0.135*length(Zx)
+Zx.23.e <- 0.0235*length(Zx)
+Zx.3.e <- 0.0215*length(Zx)
+# testing
+v <- function(a,b){(a-b)^2/b}
+X <- v(Zx.01,Zx.01.e)+v(Zx.12,Zx.12.e)+v(Zx.23,Zx.23.e)+v(Zx.3,Zx.3.e)+v(Zx.01.n,Zx.01.e)+v(Zx.12.n,Zx.12.e)+v(Zx.23.n,Zx.23.e)+v(Zx.3.n,Zx.3.e)
+if(X < qchisq(.95, df=3)){print("The graduated mortality fit the data well")}else{print("The graduated mortality does not fit the data well")}
+
+```
+
+iii. Signs test
+
+```{r}
+# Finding k and m-k
+pbinom(36,93,0.5,lower.tail = TRUE) # gives value:0.01875712
+pbinom(37,93,0.5,lower.tail = TRUE) # gives value:0.03069295
+# then k=39,m-k=56
+# if 37 < P < 56 then we fail to reject Ho
+P <- length(Zx[Zx>0]) # P is 39
+# Since 37<39<56, there is no efficient to reject Ho.
+
+```
+
+iv. Cumulative deviations test f
+
+```{r}
+# we test the age range (31:45)
+test.stat <- sum(dx.18[c(7:27)]-exc.18[c(7:27)]*mu_estimate[c(7:27)])/sqrt(sum(exc.18[c(7:27)]*mu_estimate[c(7:27)]))
+test.stat # < -1.96 # Reject Ho
+# test.stat = -80.14821 is very low, hence over-graduation
+```
+v. Grouping of signs test
+
+```{r}
+# calculate the groups from 93 values
+m <- length(Zx) 
+n1 <- length(Zx[Zx>0]) # n1,n2 is number of positive Zx and number of negative Zx respectively 
+n2 <- m-n1
+G <- 4
+Pr<- function(g){factorial(n1-1)*factorial(n2+1)*factorial(n1)*factorial(m-n1)/factorial(m)/factorial(n1-g)/factorial(g)/factorial(n2+1-g)}
+# Finding k
+Pr(10) # gives value 0.007042755
+Pr(11) # gives value 0.8355269
+# from the results, k=10
+# G <10 so we reject Ho at 5% significant interval. Hence, over-graduation.
+```
+
+
+vi. Serial correlations test
+
+```{r}
+z1 <- Zx[c(1:90)] # the lag is 3
+z2 <- Zx[c(4:93)]
+z <- mean(Zx)
+r <- sum((z1-z)*(z2-z))/90/sum((Zx-z)^2)*93
+t.stat2 <- r*sqrt(93)
+if(t.stat2 < 1.645){print("Fail to reject Ho")}else{print("The model is over-graduation")}
+```
+3.e. 
+
+```{r}
+# applying the Gompert Makeham model we obtain the mortality rate for 2019
+# since there is no mortality improvement, the predicted rate for 2019 will be:
+mu.predict <- mu_estimate
+mse.GM <- sum((mu.x.19-mu.predict)^2)/93
+mse.GM # this value is large 
+plot(mu.x.19,mu.predict)
+abline(0, 1, lty = 2, col = "red")
+plot(age,log(mu.x.19),col="red",main="Log of rojected mortality vs log of observed mortality ",type="l")
+lines(age,log(mu.predict),type = "l")
+```
+
+
+4. Mortality projection fitting – Lee-Carter Model
+
+4.b-d.
+
+```{r}
+JMort.LC <- lca(JMort, series = "total",years = JMort$year[-73], max.age = 100)
+plot(JMort.LC)    
+par(mfrow =c(1,1))
+plot(JMort.LC$residuals)
+heatmap(JMort.LC$residuals$y, Rowv=NA, Colv=NA, col = terrain.colors(256))
+heatmap(JMort.LC$residuals$y, Rowv=NA, Colv=NA, col = c("black", "white"))
+```
+
+4.c.
+
+```{r}
+JMort.LC.forecast <- forecast(JMort.LC,h=50)
+mu.pre19 <- JMort.LC.forecast[["rate"]][["total"]][,"1"][c(18:100)] # produces predicted mortality rate of 2019 
+mse.LC <- sum((mu.x.19[c(1:83)]-mu.pre19)^2)/length(mu.pre19)
+mse.LC # 0.000424354
+plot(mu.x.19[c(1:83)],mu.pre19)
+abline(0, 1, lty = 2, col = "red")
+plot(JMort.LC.forecast$kt.f)
+```
+
+5. Produce projected mortality rates to the year 2030, 2040 and 2050 for both models.
+
+```{r}
+# projecting mortality rate for year 2030,2040,2050:
+mu.30.LC <- JMort.LC.forecast[["rate"]][["total"]][,"12"][c(18:100)]
+mu.40.LC <- JMort.LC.forecast[["rate"]][["total"]][,"22"][c(18:100)]
+mu.50.LC <- JMort.LC.forecast[["rate"]][["total"]][,"32"][c(18:100)]
+# the projected mortality rates for 2030,2040,2050 obtained from GM model will remain the same and be mu_estimate. 
+```
+
