@@ -1,0 +1,211 @@
+
+Data_Assessment2 contains daily stock prices for AZJ stocks (Aurizon Holdings Ltd) from 01-06-2018 to 02-11-2020. 
+We need to find the model which fits the nature of the stock prices. Below are the codes used for fidning the fitted model.
+
+setwd("C:/...")
+library(xts)
+data1=readRDS("Data_Assessment2.rds")
+d1<- data1[-1,c(1,65)]
+ret_log_azj=100*diff(log(data1$`AZJ-AU`)) 
+data=data.frame(Date=d1$Date,AZJ_price=d1$`AZJ-AU`,AZJ_ret=ret_log_azj)
+head(data)
+```
+
+4.Value at Risk and Expected Shortfall
+
+4.2. Calculate 1% and 5% level Value at Risk (VaR) using the historical method
+
+```{r}
+var_his=quantile(data$AZJ_ret,c(0.01,0.05))
+var_his
+```
+
+4.3.Calculate and report 1% and 5% level Value at Risk (VaR) using the parametric method assuming Normal distribution.
+
+```{r}
+mu.hat=mean(data$AZJ_ret)
+sigma.hat=sd(data$AZJ_ret)
+var_1=qnorm(0.01,mu.hat,sigma.hat)
+var_1
+var_5=qnorm(0.05,mu.hat,sigma.hat)
+var_5
+```
+
+4.4.Calculate and report 1% and 5% level Value at Risk (VaR) using the parametric method assuming Student-t distribution.
+
+```{r}
+library(MASS)
+library(sn)
+fit_t=fitdistr(data$AZJ_ret,densfun = "t")
+est1=as.numeric(fit_t$estimate)
+m1=est1[1] 
+s1=est1[2] 
+df1=est1[3] 
+var_t_1= qst(0.01,xi=m1,omega = s1,nu=df1)
+var_t_1
+var_t_5= qst(0.05,xi=m1,omega = s1,nu=df1)
+var_t_5
+```
+
+4.5.Plot the Normal and Student-t based 1% VaR levels on a bar density plot.
+
+```{r}
+library(ggplot2)
+library(ggthemes)
+
+var <- c(var_1,var_t_1)
+
+azj_den=dnorm(x=data$AZJ_ret,mean=mean(data$AZJ_ret),sd=sd(data$AZJ_ret))
+data_rd=data.frame(x=data$AZJ_ret,y=azj_den)
+
+azj_den_t=dst(x=data$AZJ_ret,xi=m1,omega = s1,nu=df1) 
+data_rd2=cbind(data_rd,y2=azj_den_t)
+p2=ggplot(data_rd2,aes(x=x))
+p2+geom_histogram()+labs(title = "the Normal and Student-t based 1% VaR levels")+
+  theme_economist()+geom_vline(xintercept = var,linetype=2,colour=c("red","blue"))
+```
+
+4.6. Calculate 1% and 5% level Expected Shortfall (ES) using the historical method.
+
+```{r}
+vr1=quantile(data$AZJ_ret,0.01)
+
+vr5=quantile(data$AZJ_ret,0.05)
+
+es1=data$AZJ_ret<vr1
+es2=data$AZJ_ret<vr5
+
+#sum
+
+es1.1=sum(data$AZJ_ret*es1)/sum(es1)
+es2.1=sum(data$AZJ_ret*es2)/sum(es2)
+
+(es_hs=cbind(es1.1,es2.1))
+```
+
+5. Stationarity & ARMA (p,q) models
+
+5.1.Convert the data to an xts data type using the xts package.
+
+```{r}
+library(xts)
+data2=xts(data[,c(2,3)],order.by = as.Date(data$Date))
+str(data2)
+```
+
+5.2. Select the returns from the data and conduct the following: Plot the time series return data with main title filled with the name of the series. Include the plot in your answer.
+
+```{r}
+plot(data2$AZJ_ret, main= "Return of AZJ")
+```
+
+5.3. Run the Augmented Dickey-Fuller (ADF) on the price and return series. Are the prices and returns stationary? Comment based on the test statistics.
+
+```{r}
+library(tseries)
+
+adf.test(data2$AZJ_price) 
+adf.test(data2$AZJ_ret)
+```
+
+Based on the results of ADF test, we can see that the price is not stationary since p-value is greater than 5%. The return is stationary because p-value is less than 5%, hence the rejection of null hypothesis.
+
+5.4. Create a PACF and ACF plots using pacf and acf functions to estimate the AR (p) and MA(q) order for the return time series. Identify the order clearly and include the figures in your response.
+
+```{r}
+# estimate AR(p) order
+pacf(data2$AZJ_ret)
+# estimate MA(q) order
+acf(data2$AZJ_ret)
+```
+
+Based on PACF result p order of AR(p) can take 1,4 while the q order of MA(q) could be 1,2,4,5 based on ACF result.
+However, we will choose p=4 for AR(p) and take q = 5 for MA(q).
+
+5.5.Determine the order (p,q) for the ARMA(p,q) model using the Information Criteria based selection (use 10 lags each) . Fit an ARMA(p,q) model using the identified order. Generate the summary of the fit object to analyse the fitted coefficients. Are these coefficients significant? Discuss the interpretation in the case the Information Criteria based method estimates the identified order as (0,0).
+
+```{r}
+library(forecast)
+auto.arima(data2$AZJ_ret)
+arma1=Arima(data2$AZJ_ret,order = c(1,0,0))
+summary(arma1)
+
+# analyse the fitted coefficients
+abs(-0.2777/ 0.0387) > qnorm(0.975) # True so ar1 is significant
+abs(-0.0223/0.0550) > qnorm(0.975) # FALSE so the intercept is not significant
+
+```
+
+In the case the Information Criteria based method estimates the identified order as (0,0), it means the it is white noise, so the errors are uncorrelated across time.
+
+5.6. Use the fitted object to plot diagnostic plots for the residuals, i.e., ACF and PACF plots of the residuals. 
+Do the residuals appear i.i.d ? Your comment should be based on the plot.
+
+```{r}
+resid2=residuals(arma1)
+autoplot(resid2)
+acf(resid2) 
+pacf(resid2)
+```
+
+From the result of ACF and PACF, we can see there is a significant correlation at lag 5,the residuals do not appear i.i.d. Therefore, it's not a good fit model.
+
+6.Heteroskedasticity & GARCH models
+
+6.1. Take the return series and square of the return series and plot the ACF function for both. Comment on the nature of Autocorrelation as seen in the plots.
+
+```{r}
+acf(data2$AZJ_ret)
+ret1 = (data2$AZJ_ret)^2
+acf(ret1)
+```
+
+From two ACF, we can see that there are strong autocorrelation, hence the existence of arch effect. 
+
+6.2. Run the Ljung-Box test to test for independence in the squared returns. Are they independent? Comment based on the test statistics.
+
+```{r}
+Box.test(ret1,lag = 10,type="Ljung-Box")
+```
+
+We can see that p-value is less than 0.05, hence the squared returns are dependent.
+
+6.3. Fit the following ARMA+GARCH models to the log return time series to select the best model based on the information criteria.
+(a) GARCH(1,1) model with Student-t distributon
+(b) ARMA(1,1) + GARCH(1,1) model with Student-t distribution
+
+```{r}
+library(fGarch)
+# garch11
+fit.garch2=garchFit(~garch(1,1),data=data2$AZJ_ret,cond.dist = "std",trace = FALSE)
+#arma(1,1) garch(1,1)
+fit.arma11garch=garchFit(~arma(1,1)+garch(1,1),cond.dist = "std",trace=FALSE,data=data2$AZJ_ret)
+aic1=c(fit.garch2@fit$ics[1],fit.arma11garch@fit$ics[1])
+which(aic1==min(aic1))
+```
+
+From the results, we can see that model ARMA(1,1) + GARCH(1,1) model with Student-t distribution has the lower AIC. Therefore, we choose this model.
+
+6.4.Use the rugarch package and fit the best fit model from the previous step (3) to the return time series. Plot the "Empirical Density of Standardized Residuals" and the "ACF of Standardized Residuals" plot. Do the residuals appear iid? Discuss
+
+
+```{r}
+library(rugarch)
+garch_spec=ugarchspec(variance.model = list(model="sGARCH",garchOrder=c(1,1)),mean.model= list(armaOrder=c(1,1)),distribution.model = "std")
+fit_garch=ugarchfit(spec = garch_spec,data=data2$AZJ_ret)
+fit_garch
+plot(fit_garch,which=8)
+plot(fit_garch,which=10)
+```
+
+From the results, we can see that the residuals appear iid. There is no significant correlation. Therefore the model is a good fit.
+
+6.5. Use the previously selected GARCH model and the rugarch package to calculate a moving window 1 day ahead forecast of 1% and 5% Value at Risk for 100 days. The window size should be set to 500 days (two trading years) and 1% and 5% level Value at Risk (VaR) should be calculated using the parametric method assuming Student-t distribution. Plot the VaR forecasts.
+
+```{r}
+var.t=ugarchroll(garch_spec,data=data2$AZJ_ret,n.head=1,forecast.length = 100,refit.every = 5,window.size = 500,refit.window = "moving")
+plot(var.t,which=4,VaR.alpha=0.05)
+plot(var.t,which=4,VaR.alpha=0.01)
+
+```
+
